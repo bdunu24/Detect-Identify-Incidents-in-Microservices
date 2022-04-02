@@ -80,7 +80,7 @@ Navigate back to the *IAM* service on the AWS Management Console. Select the **R
 
 ![](./images/14.png)
 
-Next, select **AWS Service** and then select **EC2** as the use case. Then scroll to the bottom page to go head to the next screen.
+Next, select **AWS Service** and then select **EC2** as the use case. Then scroll to the bottom page to head to the next screen.
 
 ![](./images/15.png)
 
@@ -92,7 +92,7 @@ Add the following permission policies:
 
 Once you secelct *next*. Enter your preferred Role Name and/or Description. Once you scoll to the bottom of the page, you'll notice all three permissions have been added!
 
-Finalize your setup by crrating the cluster.
+Finalize your setup by creating the cluster.
 
 ![](./images/16.png)
 
