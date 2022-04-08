@@ -124,10 +124,9 @@ On the Log Collector Setup page, copy the Helm command from the Zebrium Send Log
 
 In the Helm command you copied, delete the following parts of the line:
 
-    zebrium.timezone=KUBERNETES_HOST_TIMEZONE
-zebrium.deployment=YOUR_SERVICE_GROUP
+    zebrium.timezone=KUBERNETES_HOST_TIMEZONE,zebrium.deployment=YOUR_DEPLOYMENT_NAME
 
-COpy the Helm command from the **Zebrium Send Logs** page.
+Copy the Helm command from the **Zebrium Send Logs** page.
 
 **PLEASE NOTE:** You can cut out this portion of the code:
 
@@ -137,28 +136,180 @@ Below is what we have once the above portion has been removed. (make sure to sub
 
     helm upgrade -i zlog-collector zlog-collector --namespace zebrium --create-namespace --repo https://raw.githubusercontent.com/zebrium/ze-kubernetes-collector/master/charts --set zebrium.collectorUrl=https://cloud-ingest.zebrium.com,zebrium.authToken=XXXX
 
+![](./images/22.png)
 
+**TROUBLESHOOTING:** If you receive an "Error: Kubernetes cluster unreachable" message as an output to the above command, try configuring kubectl so that you can connect to your Amazon EKS cluster:
 
+    $ aws eks --region <REGION> update-kubeconfig --name <EKSClusterName>
 
+    $ kubectl get svc
 
+![](./images/23.png)
 
+The Zebrium UI should detect that logs are being sent within a minute or two. Once received, you’ll see a message like this:
 
+![](./images/z24.png)
 
+The Zebrium installation and setup is now complete! The machine learning will begin structuring and learning the patterns in the logs from your newly created K8s (Kubernetes) environment.
 
+### Step 3. Install and fire up the Sock Shop demo app
 
+[Sock Shop](https://microservices-demo.github.io/) is a really good demo microservices application as it simulates the key components of the user-facing part of an e-commerce website. It is built using Spring Boot, Go kit, and Node.js and is packaged in Docker containers. Visit this [GitHub page](https://github.com/microservices-demo/microservices-demo/blob/master/internal-docs/design.md) to learn more about the application design.
 
+Later down the line, we'll install and use the [Litmus Chaos Engine](https://litmuschaos.io/) to “break” the Sock Shop application. So, we are now going to install Sock Shop using a YAML config file that contains annotations for the Litmus Chaos Engine.
 
+    $ kubectl create -f https://raw.githubusercontent.com/zebrium/zebrium-sockshop-demo/main/sock-shop-litmus-chaos.yaml
 
+![](./images/25z.png)
 
+Then: 
 
+    $ kubectl get pods -n sock-shop
 
+Wait until all the pods are in a running state (this can take a few minutes!).
 
+![](./images/26z.png)
 
+Once all the services are running, you can bring up the app in your browser. You will need to set up port forwarding and get the front-end IP address and port by running the command below:
 
+Get pod name of front-end:
 
+    $ kubectl get pods -n sock-shop | grep front-end
 
+![](./images/27z.png)
 
+**Run port forward in a new shell window.** Use the pod name from the above command in place of XXX’s
 
+    $ kubectl port-forward front-end-XXXX-XXXX 8079:8079 -n sock-shop
+
+![](./images/28z.png)
+
+Now open the ip_address:port from above (in this case: 127.0.0.1:8079) in a new browser tab. You should now be able to interact with the Sock Shop app in your browser and verify that it’s working correctly.
+
+![](./images/29z.png)
+
+Alternatively can navigate to CloudWatch in the AWS Console and visit the Resources page under Container Insights to verify that everything looks healthy. Details on how to do this can be found at the [Amazon CloudWatch User Guide](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/deploy-container-insights-EKS.html).
+
+### Step 4. Install the Litmus Chaos Engine
+
+We’re going to use the open-source Litmus chaos tool to run a chaos experiment that “breaks” the Sock Shop app. Install the required Litmus components using the following commands:
+
+    $ helm repo add litmuschaos https://litmuschaos.github.io/litmus-helm/
+
+    $ helm repo add litmuschaos https://litmuschaos.github.io/litmus-helm/
+
+    $ kubectl apply -f "https://hub.litmuschaos.io/api/chaos/1.13.6?file=charts/generic/experiments.yaml" -n sock-shop
+
+![](./images/30z.png)
+![](./images/31z.png)
+
+Setup service account with the appropriate RBAC to run the network corruption experiment
+
+    $ kubectl apply -f https://raw.githubusercontent.com/zebrium/zebrium-sockshop-demo/main/pod-network-corruption-rbac.yaml
+
+![](./images/32z.png)
+
+Now, make note of the current time:
+
+    $ date
+
+![](./images/33z.png)
+
+### Step 5. Take a two hour break!
+
+This is a new EKS cluster, a new app and Zebrium account, so it is important to give machine learning a bit of time to learn the normal log patterns. It is best practice to wait at least two hours before proceeding with the next steps.
+
+You can use this time to explore the Zebrium UI.
+
+On the REPORTING page, you should see at least one sample root cause report.
+
+![](./images/34z.png)
+
+### Step 6. Running a network corruption chaos experiment to break the Sock Shop app.
+
+Now that the ML has had a chance to get a baseline of the logs, we’re going to break the environment by running a Litmus network corruption chaos experiment. You can read about the details of what the experiment does [here](https://github.com/litmuschaos/github-chaos-actions/blob/master/experiments/pod-network-corruption/README.md).
+
+The command below will start the network corruption experiment:
+
+    $ kubectl apply -f https://raw.githubusercontent.com/zebrium/zebrium-sockshop-demo/main/pod-network-corruption-chaos.yaml
+
+Make note of the date:
+
+    $ date
+
+![](./images/35z.png)
+
+Get the experiment started by running:
+
+    $ kubectl get pods -n sock-shop -w
+
+![](./images/36z.png)
+
+It takes awhile for the experiment to start, so you have to wait until the pod-network-corruption-helper goes into a Running state. Enter *^C (Shitft + Command)* once everything is running.
+
+ to the Sock Shop UI. You should still be able to navigate around and refresh the app but might notice some operations will fail.
+
+ ![](./images/37z.png)
+
+ The chaos test will run for two minutes. Wait for it to complete before proceeding to the next step.
+
+ If the browser does not show up, rerun the command below in a different terminal:
+
+    $ $ kubectl port-forward front-end-XXXX-XXXX 8079:8079 -n sock-shop
+
+The chaos test will run for two minutes, wait for it to complete before proceeding to the next step.
+
+### Step 7. The results and how to interpret them
+
+Now that the chaos experiment is complete, please allow some time for the Zebrium ML platform to detect the errors. This may take up to 10 minutes. Then, refresh your browser windows until you see one or more new root cause reports (UI refresh is not automatic).
+
+![](./images/38z.png)
+
+The type of errors that appear are based on a combination of many factors. This includes the learning period, the events occurred while learning, and the timing/order of the log lines while the experiment was running, and so forth.
+
+The reporting page contains a summary list of all the root cause reports found by the machine learning. There are three useful parts of the summary:
+
+1. Plain language NLP summary  This is an experimental feature where we use the GPT-3 language model to construct a summary of the report. The summary provides some useful context about the problem.
+
+2. Log type(s) and host(s) The log type and host (front end, events, orders, and messages) that contain the events for the incident.
+
+3. “Hallmark” events The ML picks out one or two events that it believes will define the problem.
+
+After running the Chaos experiment, Zebrium generated a series of reports. Here is a summary of the root cause errors that were generated in my Zebrium account:
+
+![](./images/39z.png)
+
+Clicking on the summary lets you drill down into the details of the root cause report. Initially, you see only the core events. The core events represent the cluster of correlated anomalies that the ML picks out. There are many factors that go into anomaly scoring, but the most important ones are events that are either “rare” or “bad” (events with high severity).
+
+![](./images/40z.png)
+
+The displayed core events represent the cluster of correlated anomalies that the Zebrium ML selected. I zoomed-in to view more details of the root cause report.
+
+Each zoom level displays additional surrounding errors and anomalies that the Zebrium ML believes are related. Here are the logs I observed after I clicked on the next zoom level:
+
+It’s interesting to note the variance in the structure of these events. Fortunately, the ML automatically learns how to parse, structure, and categorize each different type of event!
+
+### Conclusion
+
+The process of troubleshooting and tracking down the root cause of an incident in a distributed application is becoming more and more difficult and time-consuming.
+
+In this project, we utilized the principles of Chaos Engineering to deliberately "break" the Sock Shop microservices application. The Zebrium machine learning technology was able to detect this and build a root cause report that detailed the root cause.
+
+The Zebrium ML platform was able to detect and outline the root cause of the issue. This powerful technology demonstrates how machine learning can be used to automatically detect anomalies within a set of log lines and define the root cause.
+
+### Cleaning up
+
+To avoid charges on our AWS account for resources we are no longer using, we need to delete them.
+
+Navigate to the 'Amazon EKS' console. Under 'Clusters', click on the cluster you created.
+
+Next, in the 'Configuration' tab, select the 'Compute' tab and then delete the node group.
+
+![](./images/42z.png)
+
+You will be prompted to confirm whether or not you want to delete the node groups. Confirm by typing the name of the node group, then click 'Delete'.
+
+![](./images/43z.png)
 
 
 
