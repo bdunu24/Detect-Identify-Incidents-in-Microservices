@@ -311,9 +311,16 @@ You will be prompted to confirm whether or not you want to delete the node group
 
 ![](./images/43z.png)
 
+Once the node groups have been deleted, click 'Delete cluster' to delete the eks cluster.
 
+![](./images/44z.png)
 
+Confirm deletion by typing the name of the cluster, then clicking 'Delete.'
 
+![](./images/45z.png)
 
+Refresh the page to confirm that the cluster has been deleted.
 
+![](./images/46z.png)
 
+And that's it! Well done!
